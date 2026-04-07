@@ -4,6 +4,12 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 import faiss
 import numpy as np
 
+from groq import Groq
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 # 🔹 Step 1: Load PDF
 def load_pdf(file_path):
@@ -50,28 +56,19 @@ def retrieve_chunks(query, model, index, chunks, k=3):
     return [chunks[i] for i in indices[0]]
 
 
-# 🔹 Step 6: Generate answer (IMPROVED VERSION)
-def generate_answer(query, retrieved_chunks, tokenizer, model):
-    # Use limited context for better quality
+# 🔹 Step 6A: Local LLM (HuggingFace)
+def generate_answer_local(query, retrieved_chunks, tokenizer, model):
     context = "\n".join(retrieved_chunks[:2])
 
-    # Query-aware instruction
-    if "summarize" in query.lower():
-        instruction = "Summarize the key ideas in simple language."
-    elif "conclusion" in query.lower():
-        instruction = "Explain the conclusion clearly in simple terms."
-    else:
-        instruction = "Answer clearly based on the context."
-
     prompt = f"""
-You are a highly intelligent assistant.
+You are an expert assistant.
 
-{instruction}
+Explain the answer in simple words.
 
-IMPORTANT RULES:
-- Do NOT copy text from the context
-- Explain in your own words
-- Keep the answer short and clear
+IMPORTANT:
+- Do NOT copy text
+- Use your own words
+- Be clear and concise
 
 Context:
 {context}
@@ -92,7 +89,42 @@ Answer:
         **inputs,
         max_new_tokens=200,
         do_sample=True,
-        temperature=0.9
+        top_p=0.9
     )
 
     return tokenizer.decode(outputs[0], skip_special_tokens=True)
+
+
+# 🔹 Step 6B: Groq LLM (API)
+def generate_answer_groq(query, retrieved_chunks):
+    client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+
+    context = "\n".join(retrieved_chunks[:2])
+
+    prompt = f"""
+You are an expert assistant.
+
+Explain the answer in simple terms.
+
+IMPORTANT:
+- Do NOT copy text
+- Use your own words
+- Be clear and concise
+
+Context:
+{context}
+
+Question: {query}
+
+Answer:
+"""
+
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[
+            {"role": "user", "content": prompt}
+        ],
+        temperature=0.3
+    )
+
+    return response.choices[0].message.content

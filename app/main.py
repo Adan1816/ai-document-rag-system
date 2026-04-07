@@ -7,7 +7,8 @@ from app.rag_pipeline import (
     create_embeddings,
     store_in_faiss,
     retrieve_chunks,
-    generate_answer
+    generate_answer_local,
+    generate_answer_groq
 )
 
 
@@ -33,10 +34,15 @@ def main():
     index = store_in_faiss(embeddings)
     print("✅ FAISS index ready")
 
-    # 🔹 Step 6: Load LLM
-    print("\n⏳ Loading LLM...")
-    tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-base")
-    model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-t5-base")
+    # 🔹 Step 6: Choose mode
+    mode = input("\nChoose mode (local/groq): ").strip().lower()
+
+    if mode == "local":
+        print("\n⏳ Loading local LLM...")
+        tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-base")
+        model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-t5-base")
+    else:
+        print("\n⚡ Using Groq API (no local model loading)")
 
     print("\n🤖 System ready! Ask questions (type 'exit' to quit)\n")
 
@@ -49,7 +55,10 @@ def main():
 
         results = retrieve_chunks(query, embedding_model, index, chunks)
 
-        answer = generate_answer(query, results, tokenizer, model)
+        if mode == "groq":
+            answer = generate_answer_groq(query, results)
+        else:
+            answer = generate_answer_local(query, results, tokenizer, model)
 
         print("\n🤖 Answer:\n")
         print(answer)
